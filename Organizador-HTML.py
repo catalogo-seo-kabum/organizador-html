@@ -19,7 +19,7 @@ class AutomacaoApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Organizador Full Stack - Log Detalhado")
-        self.root.geometry("1000x800") # Aumentei a janela para caber o log
+        self.root.geometry("1000x500")
 
         # Configurar Drag and Drop
         self.root.drop_target_register(DND_FILES)
@@ -118,8 +118,7 @@ class AutomacaoApp:
                 self.log("   AVISO: Nenhum arquivo HTML encontrado.")
                 with open(nome_html_final, 'w') as f: f.write("")
 
-            # 4. PADRONIZAÇÃO (CSS, JS, IMG, FONT)
-            # Esta função agora vai logar tudo que mover
+            # 4. PADRONIZAÇÃO E EXTRAÇÃO DAS SUBPASTAS DE IMAGEM
             mapa_mudancas = self.padronizar_pastas()
 
             # 5. Atualizar HTML
@@ -146,15 +145,15 @@ class AutomacaoApp:
                 webbrowser.open(caminho_html_navegador)
 
     def padronizar_pastas(self):
-        self.log("\n[ETAPA 4] Organizando Pastas e Movendo Arquivos...")
+        self.log("\n[ETAPA 4] Organizando Pastas, Extraindo Subpastas e Movendo Arquivos...")
         regras = {
             'css': ['.css'],
             'js': ['.js'],
-            'img': ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico'],
+            'img': ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'],
             'font': ['.ttf', '.otf', '.woff', '.woff2', '.eot']
         }
 
-        # Cria pastas e avisa
+        # Cria pastas padrão e avisa
         for pasta in regras.keys():
             if not os.path.exists(pasta):
                 os.makedirs(pasta)
@@ -177,29 +176,40 @@ class AutomacaoApp:
                     relativo_origem = os.path.relpath(origem_abs, '.').replace('\\', '/')
                     
                     if relativo_origem.startswith(pasta_destino + '/'):
-                        continue
+                        # Se já está na pasta certa raiz (ex: img/logo.png), pula
+                        # Mas se estiver numa subpasta (ex: img/icones/logo.png), nós vamos mover!
+                        if relativo_origem.count('/') == 1:
+                            continue
 
                     destino_abs = os.path.join(pasta_destino, file)
                     relativo_destino = os.path.join(pasta_destino, file).replace('\\', '/')
 
                     try:
                         self.mover_sobrescrever(origem_abs, destino_abs)
-                        # LOG DETALHADO DA MOVIMENTAÇÃO
-                        self.log(f"   [ARQUIVO MOVIDO] {relativo_origem}  >>>  {relativo_destino}")
+                        
+                        # Mensagem personalizada para caso seja pasta 'images' ou subpasta de 'img'
+                        if 'images/' in relativo_origem.lower() or ('img/' in relativo_origem.lower() and relativo_origem.count('/') > 1):
+                            self.log(f"   [EXTRAINDO DE SUBPASTA] {relativo_origem}  >>>  {relativo_destino}")
+                        else:
+                            self.log(f"   [ARQUIVO MOVIDO] {relativo_origem}  >>>  {relativo_destino}")
+                            
                         mapa_mudancas[relativo_origem] = relativo_destino
                     except Exception as e:
                         self.log(f"   [ERRO AO MOVER] {file}: {e}")
 
-        # Limpeza
-        self.log("   Verificando pastas vazias...")
+        # Varredura RIGOROSA para apagar pastas vazias
+        self.log("   Verificando e apagando pastas vazias...")
         for root, dirs, files in os.walk('.', topdown=False):
             for name in dirs:
-                if name in regras.keys(): continue
+                # Não queremos apagar nossas pastas padrão se estiverem vazias
+                if name in regras.keys() and root == '.': 
+                    continue
+                
                 caminho_dir = os.path.join(root, name)
                 try:
                     if not os.listdir(caminho_dir): 
                         os.rmdir(caminho_dir)
-                        self.log(f"   [LIMPEZA] Pasta removida: {name}")
+                        self.log(f"   [PASTA APAGADA] A pasta vazia '{caminho_dir}' foi removida.")
                 except: pass
         
         return mapa_mudancas
@@ -219,7 +229,6 @@ class AutomacaoApp:
                 with open(caminho_arquivo, 'r', encoding='utf-8') as f:
                     conteudo = f.read()
                 
-                # Contador de mudanças neste arquivo
                 mudancas_neste_arquivo = 0
 
                 def substituir_url(match):
@@ -230,18 +239,18 @@ class AutomacaoApp:
                     if url_original.startswith(('http', 'https', 'data:', '//')):
                         return full_match
                     
+                    # Pega apenas o nome do arquivo final (ignora se estava em images/ ou img/subpasta/)
                     nome_arquivo = os.path.basename(url_original)
                     extensao = os.path.splitext(nome_arquivo)[1].lower()
                     
                     novo_caminho = None
-                    if extensao in ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico']:
+                    if extensao in ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp']:
                         novo_caminho = f"../img/{nome_arquivo}"
                     elif extensao in ['.ttf', '.otf', '.woff', '.woff2', '.eot']:
                         novo_caminho = f"../font/{nome_arquivo}"
                     
-                    if novo_caminho:
+                    if novo_caminho and not url_original.endswith(novo_caminho):
                         novo_full = f"url('{novo_caminho}')"
-                        # LOG DETALHADO DO CSS
                         self.log(f"     [CSS FIX] {url_original}  >>>  {novo_caminho}")
                         mudancas_neste_arquivo += 1
                         return novo_full
@@ -274,9 +283,12 @@ class AutomacaoApp:
                 conteudo = conteudo.replace('assets/', '')
             
             count_updates = 0
-            for caminho_antigo, caminho_novo in mapa_mudancas.items():
+            # Ordenar o mapa por chaves mais longas primeiro evita substituir partes do caminho incompleto
+            chaves_ordenadas = sorted(mapa_mudancas.keys(), key=len, reverse=True)
+
+            for caminho_antigo in chaves_ordenadas:
+                caminho_novo = mapa_mudancas[caminho_antigo]
                 if caminho_antigo in conteudo:
-                    # LOG DETALHADO DO HTML
                     self.log(f"   [HTML FIX] '{caminho_antigo}'  >>>  '{caminho_novo}'")
                     conteudo = conteudo.replace(caminho_antigo, caminho_novo)
                     count_updates += 1
