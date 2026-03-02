@@ -18,8 +18,8 @@ except ImportError:
 class AutomacaoApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Organizador Full Stack - Log Detalhado")
-        self.root.geometry("500x900")
+        self.root.title("Organizador Full Stack - Buscador de HTML")
+        self.root.geometry("600x800")
 
         # Configurar Drag and Drop
         self.root.drop_target_register(DND_FILES)
@@ -102,20 +102,29 @@ class AutomacaoApp:
                     os.rmdir(path_assets)
                     self.log("   Pasta 'assets' vazia removida.")
 
-            # 3. Renomear HTML
-            self.log("\n[ETAPA 3] Verificando HTML Principal...")
-            arquivos = os.listdir('.')
-            html_original = next((f for f in arquivos if f.lower().endswith('.html')), None)
+            # 3. Buscar e Trazer HTML para a Raiz
+            self.log("\n[ETAPA 3] Buscando arquivo HTML em todas as pastas...")
+            caminho_html_original = None
             nome_html_final = 'index.html'
 
-            if html_original:
-                if html_original.lower() != nome_html_final:
-                    self.log(f"   [RENOMEAR] '{html_original}'  >>>  '{nome_html_final}'")
-                    os.rename(html_original, nome_html_final)
+            # Faz uma varredura profunda procurando o HTML
+            for root_dir, dirs, files in os.walk('.'):
+                for file in files:
+                    if file.lower().endswith('.html'):
+                        # Dá preferência se o arquivo já se chamar index.html
+                        if caminho_html_original is None or file.lower() == 'index.html':
+                            caminho_html_original = os.path.join(root_dir, file).replace('\\', '/')
+
+            if caminho_html_original:
+                destino_html = os.path.join('.', nome_html_final)
+                # Se o arquivo não estiver na raiz exata com o nome index.html, nós movemos
+                if os.path.abspath(caminho_html_original) != os.path.abspath(destino_html):
+                    self.log(f"   [HTML ENCONTRADO] Movendo '{caminho_html_original}' >>> Raiz como '{nome_html_final}'")
+                    self.mover_sobrescrever(caminho_html_original, destino_html)
                 else:
-                    self.log(f"   Arquivo já se chama {nome_html_final}.")
+                    self.log(f"   Arquivo HTML já está na raiz como {nome_html_final}.")
             else:
-                self.log("   AVISO: Nenhum arquivo HTML encontrado.")
+                self.log("   AVISO: Nenhum arquivo HTML encontrado em todo o projeto.")
                 with open(nome_html_final, 'w') as f: f.write("")
 
             # 4. PADRONIZAÇÃO E EXTRAÇÃO DAS SUBPASTAS DE IMAGEM
@@ -176,8 +185,6 @@ class AutomacaoApp:
                     relativo_origem = os.path.relpath(origem_abs, '.').replace('\\', '/')
                     
                     if relativo_origem.startswith(pasta_destino + '/'):
-                        # Se já está na pasta certa raiz (ex: img/logo.png), pula
-                        # Mas se estiver numa subpasta (ex: img/icones/logo.png), nós vamos mover!
                         if relativo_origem.count('/') == 1:
                             continue
 
@@ -187,7 +194,6 @@ class AutomacaoApp:
                     try:
                         self.mover_sobrescrever(origem_abs, destino_abs)
                         
-                        # Mensagem personalizada para caso seja pasta 'images' ou subpasta de 'img'
                         if 'images/' in relativo_origem.lower() or ('img/' in relativo_origem.lower() and relativo_origem.count('/') > 1):
                             self.log(f"   [EXTRAINDO DE SUBPASTA] {relativo_origem}  >>>  {relativo_destino}")
                         else:
@@ -201,7 +207,6 @@ class AutomacaoApp:
         self.log("   Verificando e apagando pastas vazias...")
         for root, dirs, files in os.walk('.', topdown=False):
             for name in dirs:
-                # Não queremos apagar nossas pastas padrão se estiverem vazias
                 if name in regras.keys() and root == '.': 
                     continue
                 
@@ -239,7 +244,6 @@ class AutomacaoApp:
                     if url_original.startswith(('http', 'https', 'data:', '//')):
                         return full_match
                     
-                    # Pega apenas o nome do arquivo final (ignora se estava em images/ ou img/subpasta/)
                     nome_arquivo = os.path.basename(url_original)
                     extensao = os.path.splitext(nome_arquivo)[1].lower()
                     
@@ -277,13 +281,11 @@ class AutomacaoApp:
             except UnicodeDecodeError:
                 with open(arquivo_html, 'r', encoding='latin-1') as f: conteudo = f.read()
 
-            # Remove assets
             if 'assets/' in conteudo:
                 self.log("   [HTML] Removendo referências 'assets/' genéricas...")
                 conteudo = conteudo.replace('assets/', '')
             
             count_updates = 0
-            # Ordenar o mapa por chaves mais longas primeiro evita substituir partes do caminho incompleto
             chaves_ordenadas = sorted(mapa_mudancas.keys(), key=len, reverse=True)
 
             for caminho_antigo in chaves_ordenadas:
