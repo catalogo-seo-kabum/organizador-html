@@ -19,7 +19,7 @@ class AutomacaoApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Organizador Full Stack - Log Detalhado")
-        self.root.geometry("1000x500")
+        self.root.geometry("500x900")
 
         # Configurar Drag and Drop
         self.root.drop_target_register(DND_FILES)
