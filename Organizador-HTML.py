@@ -18,8 +18,8 @@ except ImportError:
 class AutomacaoApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Organizador Full Stack - Varredura Final e Alertas")
-        self.root.geometry("1000x800")
+        self.root.title("Organizador Full Stack - Validação de Formatos e Caminhos")
+        self.root.geometry("500x800")
 
         # Configurar Drag and Drop
         self.root.drop_target_register(DND_FILES)
@@ -30,7 +30,7 @@ class AutomacaoApp:
                                         font=("Arial", 18, "bold"), fg="#333", bg="#e0e0e0", pady=20)
         self.label_instrucao.pack(fill=tk.X, pady=10)
 
-        self.label_status = tk.Label(root, text="Organização completa com alertas visuais e varredura de pastas vazias.", fg="#666")
+        self.label_status = tk.Label(root, text="Organização completa, correção de caminhos de raiz (/) e validação de formatos.", fg="#666")
         self.label_status.pack()
 
         # Log Area
@@ -39,18 +39,22 @@ class AutomacaoApp:
         
         # Configuração das Cores do Log (Tags)
         self.log_area.tag_config('error', background='black', foreground='#FF5555', font=("Consolas", 11, "bold"))
-        self.log_area.tag_config('warning', background='#FFFACD', foreground='#D2691E', font=("Consolas", 10, "bold")) # Fundo amarelinho, texto laranja escuro
+        self.log_area.tag_config('warning', background='#FFFACD', foreground='#D2691E', font=("Consolas", 10, "bold"))
         self.log_area.tag_config('normal', foreground='#333333')
+        
+        # NOVO: Alerta visual bem destacado para validação de formatos (vídeos/imagens fora do padrão)
+        self.log_area.tag_config('alert_format', background='#FFD700', foreground='#B22222', font=("Consolas", 12, "bold"))
         
         self.log("Sistema pronto. Aguardando arquivo ZIP...")
 
     def log(self, mensagem, level='normal'):
-        """Grava no log usando o nível de cor especificado ('normal', 'warning', 'error')"""
+        """Grava no log usando o nível de cor especificado"""
         self.log_area.config(state='normal')
         
-        # Se for um erro crítico, coloca uma formatação para chamar bastante atenção
         if level == 'error':
             self.log_area.insert(tk.END, f"\n[ !!! ERRO CRÍTICO !!! ]\n{mensagem}\n\n", 'error')
+        elif level == 'alert_format':
+            self.log_area.insert(tk.END, f"\n{mensagem}\n\n", 'alert_format')
         elif level == 'warning':
             self.log_area.insert(tk.END, f"[ AVISO ] {mensagem}\n", 'warning')
         else:
@@ -136,24 +140,24 @@ class AutomacaoApp:
                     self.log(f"   Arquivo HTML já está na raiz como {nome_html_final}.")
             else:
                 self.log("Nenhum arquivo HTML encontrado. O script organizará as pastas mesmo assim.", 'warning')
-                with open(nome_html_final, 'w') as f: f.write("") # Cria um em branco para não bugar o resto
+                with open(nome_html_final, 'w') as f: f.write("")
 
-            # 4. PADRONIZAÇÃO E EXTRAÇÃO DAS SUBPASTAS DE IMAGEM
+            # 4. PADRONIZAÇÃO, VALIDAÇÃO DE EXTENSÕES E EXTRAÇÃO DAS SUBPASTAS DE IMAGEM
             mapa_mudancas = self.padronizar_pastas()
 
-            # 5. Atualizar HTML
+            # 5. Atualizar HTML (Inclui agora a remoção de barras / e ../)
             if os.path.exists(nome_html_final):
                 self.atualizar_html(nome_html_final, mapa_mudancas)
 
             # 6. Atualizar CSS
             self.processar_arquivos_css()
 
-            # 7. VARREDURA FINAL DE PASTAS VAZIAS (Aspirador de Pó Final)
+            # 7. VARREDURA FINAL DE PASTAS VAZIAS
             self.varredura_final_pastas()
 
             caminho_html_navegador = 'file://' + os.path.realpath(nome_html_final)
             self.log("\n" + "=" * 80)
-            self.log("SUCESSO! Projeto 100% Organizado.")
+            self.log("SUCESSO! Projeto 100% Organizado e Validado.")
             self.log("=" * 80)
 
         except Exception as e:
@@ -168,7 +172,7 @@ class AutomacaoApp:
                 webbrowser.open(caminho_html_navegador)
 
     def padronizar_pastas(self):
-        self.log("\n[ETAPA 4] Organizando Pastas, Extraindo Subpastas e Movendo Arquivos...")
+        self.log("\n[ETAPA 4] Organizando Pastas e Validando Formatos...")
         regras = {
             'css': ['.css'],
             'js': ['.js'],
@@ -186,8 +190,18 @@ class AutomacaoApp:
         for root, dirs, files in os.walk('.', topdown=False):
             for file in files:
                 extensao = os.path.splitext(file)[1].lower()
-                pasta_destino = None
+                
+                # =========================================================
+                # NOVO: VALIDAÇÕES DE ARQUIVOS INFORME O USUÁRIO (ALERTA)
+                # =========================================================
+                if extensao in ['.mp4', '.avi', '.mov', '.wmv', '.mkv']:
+                    self.log(f"[ ALERTA ] ATENÇÃO USUÁRIO: Arquivo de vídeo '{file}' encontrado.\nConverta para .webm", 'alert_format')
+                
+                elif extensao in ['.svg', '.gif', '.bmp', '.ico', '.tiff']:
+                    self.log(f"[ ALERTA ] FORMATO DE IMAGEM INVÁLIDO: '{file}'.\nConverta para o padrão (.png, .jpg ou .webp) ou devolva para o fornecedor refazer.", 'alert_format')
+                # =========================================================
 
+                pasta_destino = None
                 for pasta_key, exts in regras.items():
                     if extensao in exts:
                         pasta_destino = pasta_key
@@ -220,15 +234,10 @@ class AutomacaoApp:
     def processar_arquivos_css(self):
         path_css_folder = os.path.join(os.getcwd(), 'css')
         if not os.path.exists(path_css_folder): 
-            self.log("Nenhuma pasta CSS encontrada para edição.", 'warning')
             return
 
         self.log("\n[ETAPA 6] Corrigindo referências internas nos arquivos CSS...")
         arquivos_css = [f for f in os.listdir(path_css_folder) if f.endswith('.css')]
-        
-        if not arquivos_css:
-            self.log("Nenhum arquivo .css encontrado dentro da pasta css.", 'warning')
-            return
 
         for css_file in arquivos_css:
             caminho_arquivo = os.path.join(path_css_folder, css_file)
@@ -274,7 +283,7 @@ class AutomacaoApp:
                 self.log(f"Falha ao ler e editar o arquivo CSS {css_file}: {e}", 'error')
 
     def atualizar_html(self, arquivo_html, mapa_mudancas):
-        self.log("\n[ETAPA 5] Atualizando Código HTML...")
+        self.log("\n[ETAPA 5] Atualizando e Padronizando Código HTML...")
         try:
             try:
                 with open(arquivo_html, 'r', encoding='utf-8') as f: conteudo = f.read()
@@ -286,22 +295,47 @@ class AutomacaoApp:
                 conteudo = conteudo.replace('assets/', '')
             
             count_updates = 0
+            
+            # Passo 5.1: Mapear as antigas posições para a nova estrutura
             chaves_ordenadas = sorted(mapa_mudancas.keys(), key=len, reverse=True)
-
             for caminho_antigo in chaves_ordenadas:
                 caminho_novo = mapa_mudancas[caminho_antigo]
                 if caminho_antigo in conteudo:
-                    self.log(f"   [HTML FIX] '{caminho_antigo}'  >>>  '{caminho_novo}'")
+                    self.log(f"   [HTML RE-LINK] '{caminho_antigo}'  >>>  '{caminho_novo}'")
                     conteudo = conteudo.replace(caminho_antigo, caminho_novo)
                     count_updates += 1
             
+            # =========================================================
+            # NOVO PASSO 5.2: PADRONIZAÇÃO DE BARRAS DE DIRETÓRIO
+            # Remove /css/ ou ../img/ ou ./js/ deixando apenas css/, img/, js/
+            # =========================================================
+            def fix_paths(match):
+                attr = match.group(1) # href ou src
+                folder = match.group(2) # css, js, img, font
+                filename = match.group(3) # nome do arquivo
+                novo_caminho = f'{attr}="{folder}/{filename}"'
+                
+                if match.group(0) != novo_caminho:
+                    self.log(f"   [HTML PATH FIX] {match.group(0)}  >>>  {novo_caminho}")
+                    
+                return novo_caminho
+
+            # Regex caça: href="/css/..." ou src="../img/..."
+            conteudo_limpo = re.sub(r'(href|src)=["\'](?:\.\./|\./|/)+(css|js|img|font)/([^"\']+)["\']', fix_paths, conteudo)
+            
+            if conteudo != conteudo_limpo:
+                conteudo = conteudo_limpo
+                count_updates += 1 # Computa que houve modificações de padronização
+            # =========================================================
+
             if count_updates == 0:
-                self.log("Nenhuma referência antiga foi encontrada no HTML para ser trocada.", 'warning')
+                self.log("Nenhuma referência precisou ser alterada no HTML.", 'warning')
             else:
-                self.log(f"   Total de linhas alteradas no HTML: {count_updates}")
+                self.log(f"   Processamento do HTML concluído com sucesso.")
 
             with open(arquivo_html, 'w', encoding='utf-8') as f:
                 f.write(conteudo)
+                
         except Exception as e:
             self.log(f"Falha grave ao tentar atualizar o HTML: {e}", 'error')
 
@@ -311,17 +345,13 @@ class AutomacaoApp:
         pastas_protegidas = ['css', 'js', 'img', 'font']
         apagadas = 0
 
-        # topdown=False é crucial aqui, ele apaga de dentro pra fora.
-        # Assim se tiver uma pasta vazia dentro de outra, apaga as duas.
         for root_dir, dirs, files in os.walk('.', topdown=False):
             for name in dirs:
-                # Evita apagar as pastas essenciais do projeto que criamos na raiz
                 if name in pastas_protegidas and root_dir == '.':
                     continue
                 
                 caminho_dir = os.path.join(root_dir, name)
                 try:
-                    # Verifica se a pasta está 100% vazia
                     if not os.listdir(caminho_dir): 
                         os.rmdir(caminho_dir)
                         self.log(f"   [LIXEIRA] Pasta vazia deletada: {caminho_dir.replace('./', '')}")
