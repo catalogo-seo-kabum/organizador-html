@@ -18,7 +18,7 @@ except ImportError:
 class AutomacaoApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Organizador Full Stack - Validação de Formatos e Caminhos")
+        self.root.title("Organizador Full Stack - Validação e Limpeza Total")
         self.root.geometry("500x800")
 
         # Configurar Drag and Drop
@@ -42,7 +42,7 @@ class AutomacaoApp:
         self.log_area.tag_config('warning', background='#FFFACD', foreground='#D2691E', font=("Consolas", 10, "bold"))
         self.log_area.tag_config('normal', foreground='#333333')
         
-        # NOVO: Alerta visual bem destacado para validação de formatos (vídeos/imagens fora do padrão)
+        # Alerta visual bem destacado para validação de formatos
         self.log_area.tag_config('alert_format', background='#FFD700', foreground='#B22222', font=("Consolas", 12, "bold"))
         
         self.log("Sistema pronto. Aguardando arquivo ZIP...")
@@ -145,14 +145,14 @@ class AutomacaoApp:
             # 4. PADRONIZAÇÃO, VALIDAÇÃO DE EXTENSÕES E EXTRAÇÃO DAS SUBPASTAS DE IMAGEM
             mapa_mudancas = self.padronizar_pastas()
 
-            # 5. Atualizar HTML (Inclui agora a remoção de barras / e ../)
+            # 5. Atualizar HTML (Inclui remoção de barras / e ../)
             if os.path.exists(nome_html_final):
                 self.atualizar_html(nome_html_final, mapa_mudancas)
 
             # 6. Atualizar CSS
             self.processar_arquivos_css()
 
-            # 7. VARREDURA FINAL DE PASTAS VAZIAS
+            # 7. VARREDURA FINAL DE PASTAS VAZIAS (Sem Proteção)
             self.varredura_final_pastas()
 
             caminho_html_navegador = 'file://' + os.path.realpath(nome_html_final)
@@ -191,15 +191,12 @@ class AutomacaoApp:
             for file in files:
                 extensao = os.path.splitext(file)[1].lower()
                 
-                # =========================================================
-                # NOVO: VALIDAÇÕES DE ARQUIVOS INFORME O USUÁRIO (ALERTA)
-                # =========================================================
+                # VALIDAÇÕES DE ARQUIVOS INFORME O USUÁRIO (ALERTA)
                 if extensao in ['.mp4', '.avi', '.mov', '.wmv', '.mkv']:
                     self.log(f"[ ALERTA ] ATENÇÃO USUÁRIO: Arquivo de vídeo '{file}' encontrado.\nConverta para .webm", 'alert_format')
                 
                 elif extensao in ['.svg', '.gif', '.bmp', '.ico', '.tiff']:
                     self.log(f"[ ALERTA ] FORMATO DE IMAGEM INVÁLIDO: '{file}'.\nConverta para o padrão (.png, .jpg ou .webp) ou devolva para o fornecedor refazer.", 'alert_format')
-                # =========================================================
 
                 pasta_destino = None
                 for pasta_key, exts in regras.items():
@@ -296,7 +293,6 @@ class AutomacaoApp:
             
             count_updates = 0
             
-            # Passo 5.1: Mapear as antigas posições para a nova estrutura
             chaves_ordenadas = sorted(mapa_mudancas.keys(), key=len, reverse=True)
             for caminho_antigo in chaves_ordenadas:
                 caminho_novo = mapa_mudancas[caminho_antigo]
@@ -305,10 +301,6 @@ class AutomacaoApp:
                     conteudo = conteudo.replace(caminho_antigo, caminho_novo)
                     count_updates += 1
             
-            # =========================================================
-            # NOVO PASSO 5.2: PADRONIZAÇÃO DE BARRAS DE DIRETÓRIO
-            # Remove /css/ ou ../img/ ou ./js/ deixando apenas css/, img/, js/
-            # =========================================================
             def fix_paths(match):
                 attr = match.group(1) # href ou src
                 folder = match.group(2) # css, js, img, font
@@ -320,13 +312,11 @@ class AutomacaoApp:
                     
                 return novo_caminho
 
-            # Regex caça: href="/css/..." ou src="../img/..."
             conteudo_limpo = re.sub(r'(href|src)=["\'](?:\.\./|\./|/)+(css|js|img|font)/([^"\']+)["\']', fix_paths, conteudo)
             
             if conteudo != conteudo_limpo:
                 conteudo = conteudo_limpo
-                count_updates += 1 # Computa que houve modificações de padronização
-            # =========================================================
+                count_updates += 1 
 
             if count_updates == 0:
                 self.log("Nenhuma referência precisou ser alterada no HTML.", 'warning')
@@ -340,16 +330,14 @@ class AutomacaoApp:
             self.log(f"Falha grave ao tentar atualizar o HTML: {e}", 'error')
 
     def varredura_final_pastas(self):
-        """Passa um 'Aspirador de Pó' no projeto inteiro apagando pastas vazias."""
-        self.log("\n[ETAPA 7] Varredura Final: Eliminando pastas vazias...")
-        pastas_protegidas = ['css', 'js', 'img', 'font']
+        """Passa um 'Aspirador de Pó' no projeto inteiro apagando pastas vazias, inclusive na raiz."""
+        self.log("\n[ETAPA 7] Varredura Final: Eliminando TODAS as pastas vazias da raiz...")
         apagadas = 0
 
+        # Como topdown=False, ele apaga de dentro pra fora.
+        # Agora não há mais proteção para pastas raízes: se 'js' ou 'font' estiverem vazias, serão apagadas.
         for root_dir, dirs, files in os.walk('.', topdown=False):
             for name in dirs:
-                if name in pastas_protegidas and root_dir == '.':
-                    continue
-                
                 caminho_dir = os.path.join(root_dir, name)
                 try:
                     if not os.listdir(caminho_dir): 
