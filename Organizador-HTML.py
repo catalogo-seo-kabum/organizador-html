@@ -15,344 +15,248 @@ except ImportError:
     print("Execute: pip install tkinterdnd2")
     exit()
 
+# Importação da biblioteca de Imagens
+try:
+    from PIL import Image
+    TEM_PILLOW = True
+except ImportError:
+    TEM_PILLOW = False
+
 class AutomacaoApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Organizador Full Stack - Validação e Limpeza Total")
+        self.root.title("Organizador Web Pro - Pasta ZIP Raiz")
         self.root.geometry("500x800")
 
-        # Configurar Drag and Drop
         self.root.drop_target_register(DND_FILES)
         self.root.dnd_bind('<<Drop>>', self.soltar_arquivo)
 
-        # UI Elements
         self.label_instrucao = tk.Label(root, text="ARRASTE O ARQUIVO ZIP AQUI", 
                                         font=("Arial", 18, "bold"), fg="#333", bg="#e0e0e0", pady=20)
         self.label_instrucao.pack(fill=tk.X, pady=10)
 
-        self.label_status = tk.Label(root, text="Organização completa, correção de caminhos de raiz (/) e validação de formatos.", fg="#666")
-        self.label_status.pack()
-
-        # Log Area
         self.log_area = scrolledtext.ScrolledText(root, width=120, height=35, state='disabled', font=("Consolas", 10))
         self.log_area.pack(pady=15, padx=15)
         
-        # Configuração das Cores do Log (Tags)
         self.log_area.tag_config('error', background='black', foreground='#FF5555', font=("Consolas", 11, "bold"))
         self.log_area.tag_config('warning', background='#FFFACD', foreground='#D2691E', font=("Consolas", 10, "bold"))
-        self.log_area.tag_config('normal', foreground='#333333')
-        
-        # Alerta visual bem destacado para validação de formatos
+        self.log_area.tag_config('success', foreground='#2E8B57', font=("Consolas", 10, "bold"))
         self.log_area.tag_config('alert_format', background='#FFD700', foreground='#B22222', font=("Consolas", 12, "bold"))
-        
-        self.log("Sistema pronto. Aguardando arquivo ZIP...")
+
+        self.log("Sistema pronto. O projeto será organizado em uma pasta com o nome do ZIP.")
 
     def log(self, mensagem, level='normal'):
-        """Grava no log usando o nível de cor especificado"""
         self.log_area.config(state='normal')
-        
         if level == 'error':
-            self.log_area.insert(tk.END, f"\n[ !!! ERRO CRÍTICO !!! ]\n{mensagem}\n\n", 'error')
-        elif level == 'alert_format':
-            self.log_area.insert(tk.END, f"\n{mensagem}\n\n", 'alert_format')
+            self.log_area.insert(tk.END, f"\n[ !!! ERRO !!! ] {mensagem}\n", 'error')
         elif level == 'warning':
             self.log_area.insert(tk.END, f"[ AVISO ] {mensagem}\n", 'warning')
+        elif level == 'success':
+            self.log_area.insert(tk.END, f"[ OK ] {mensagem}\n", 'success')
+        elif level == 'alert_format':
+            self.log_area.insert(tk.END, f"\n{mensagem}\n", 'alert_format')
         else:
-            self.log_area.insert(tk.END, mensagem + "\n", 'normal')
-            
+            self.log_area.insert(tk.END, mensagem + "\n")
         self.log_area.see(tk.END)
         self.log_area.config(state='disabled')
         self.root.update()
 
     def soltar_arquivo(self, event):
         caminho = event.data
-        if caminho.startswith('{') and caminho.endswith('}'):
-            caminho = caminho[1:-1]
-        
-        if caminho.lower().endswith('.zip'):
-            self.preparar_processamento(caminho)
-        else:
-            self.log("O arquivo arrastado não é um .zip", 'error')
+        if caminho.startswith('{') and caminho.endswith('}'): caminho = caminho[1:-1]
+        if caminho.lower().endswith('.zip'): self.preparar_processamento(caminho)
+        else: self.log("Por favor, arraste um arquivo .zip", 'error')
 
     def preparar_processamento(self, caminho_zip):
-        self.log("=" * 80)
-        self.log(f"INICIANDO PROCESSAMENTO: {os.path.basename(caminho_zip)}")
-        self.log("=" * 80)
+        self.log("="*80)
+        self.log(f"PROCESSANDO: {os.path.basename(caminho_zip)}")
         try:
             self.processar_zip(caminho_zip)
         except Exception as e:
-            self.log(f"Falha na execução do script: {str(e)}", 'error')
+            self.log(f"Erro crítico: {str(e)}", 'error')
             traceback.print_exc()
 
     def processar_zip(self, caminho_zip):
         diretorio_base = os.path.dirname(caminho_zip)
         cwd_original = os.getcwd()
-
-        path_extraido_absoluto = None
-        caminho_html_navegador = None
+        html_principal = None
 
         try:
-            # 1. Descompactar
-            self.log("\n[ETAPA 1] Descompactando arquivo...")
+            # Pega o nome do arquivo ZIP sem a extensão '.zip'
+            nome_zip_sem_extensao = os.path.splitext(os.path.basename(caminho_zip))[0]
+            
+            # Cria o caminho da nova pasta que terá o nome do ZIP
+            path_projeto = os.path.join(diretorio_base, nome_zip_sem_extensao)
+
+            if not os.path.exists(path_projeto):
+                os.makedirs(path_projeto)
+
+            # 1. Descompactar tudo PARA DENTRO da nova pasta com o nome do ZIP
+            self.log(f"\n>> Extraindo arquivos para a nova pasta: '{nome_zip_sem_extensao}'...")
             with zipfile.ZipFile(caminho_zip, 'r') as zip_ref:
-                zip_ref.extractall(diretorio_base)
-                primeira_pasta = zip_ref.namelist()[0].split('/')[0]
-                path_extraido_absoluto = os.path.join(diretorio_base, primeira_pasta)
+                zip_ref.extractall(path_projeto)
 
-            if not os.path.isdir(path_extraido_absoluto):
-                self.log("Estrutura do ZIP inválida ou não pôde ser lida.", 'error')
-                return
+            # Entra na nova pasta
+            os.chdir(path_projeto)
             
-            os.chdir(path_extraido_absoluto)
-            self.log(f"   Pasta acessada: {primeira_pasta}")
+            self.log(">> Iniciando organização da estrutura na nova raiz...")
             
-            # 2. Pré-limpeza (Assets)
-            path_assets = os.path.join(os.getcwd(), 'assets')
-            if os.path.exists(path_assets):
-                self.log("\n[ETAPA 2] Detectada pasta 'assets'. Esvaziando...")
-                for item in os.listdir(path_assets):
-                    origem = os.path.join(path_assets, item)
-                    destino = os.path.join(os.getcwd(), item)
-                    self.mover_sobrescrever(origem, destino)
-                    self.log(f"   [MOVIDO DE ASSETS] {item} -> Raiz")
-                if not os.listdir(path_assets):
-                    os.rmdir(path_assets)
-            else:
-                self.log("Pasta 'assets' não encontrada (Pulando limpeza inicial).", 'warning')
+            # 2. Identificar e mover HTML para a raiz da nova pasta
+            html_principal = self.organizar_html_raiz()
 
-            # 3. Buscar e Trazer HTML para a Raiz
-            self.log("\n[ETAPA 3] Buscando arquivo HTML em todas as pastas...")
-            caminho_html_original = None
-            nome_html_final = 'index.html'
+            # 3. Padronizar pastas (css, img, js, font) e mover arquivos de subpastas
+            mapa_mudancas = self.padronizar_pastas_raiz()
 
-            for root_dir, dirs, files in os.walk('.'):
-                for file in files:
-                    if file.lower().endswith('.html'):
-                        if caminho_html_original is None or file.lower() == 'index.html':
-                            caminho_html_original = os.path.join(root_dir, file).replace('\\', '/')
+            # 4. Otimização de imagens SEM PERDA de qualidade
+            self.otimizar_imagens_qualidade()
 
-            if caminho_html_original:
-                destino_html = os.path.join('.', nome_html_final)
-                if os.path.abspath(caminho_html_original) != os.path.abspath(destino_html):
-                    self.log(f"   [HTML ENCONTRADO] Movendo '{caminho_html_original}' >>> Raiz como '{nome_html_final}'")
-                    self.mover_sobrescrever(caminho_html_original, destino_html)
-                else:
-                    self.log(f"   Arquivo HTML já está na raiz como {nome_html_final}.")
-            else:
-                self.log("Nenhum arquivo HTML encontrado. O script organizará as pastas mesmo assim.", 'warning')
-                with open(nome_html_final, 'w') as f: f.write("")
+            # 5. Atualizar HTML e CSS com os novos caminhos raiz
+            if html_principal:
+                self.corrigir_caminhos_html(html_principal, mapa_mudancas)
+            
+            self.corrigir_caminhos_css()
 
-            # 4. PADRONIZAÇÃO, VALIDAÇÃO DE EXTENSÕES E EXTRAÇÃO DAS SUBPASTAS DE IMAGEM
-            mapa_mudancas = self.padronizar_pastas()
+            # 6. Limpeza final
+            self.limpar_pastas_vazias_total()
 
-            # 5. Atualizar HTML (Inclui remoção de barras / e ../)
-            if os.path.exists(nome_html_final):
-                self.atualizar_html(nome_html_final, mapa_mudancas)
+            self.log("="*80)
+            self.log(f"PROJETO ORGANIZADO COM SUCESSO NA PASTA: {nome_zip_sem_extensao}", 'success')
+            
+            if html_principal:
+                webbrowser.open('file://' + os.path.realpath(html_principal))
 
-            # 6. Atualizar CSS
-            self.processar_arquivos_css()
-
-            # 7. VARREDURA FINAL DE PASTAS VAZIAS (Sem Proteção)
-            self.varredura_final_pastas()
-
-            caminho_html_navegador = 'file://' + os.path.realpath(nome_html_final)
-            self.log("\n" + "=" * 80)
-            self.log("SUCESSO! Projeto 100% Organizado e Validado.")
-            self.log("=" * 80)
-
-        except Exception as e:
-            self.log(f"Erro inesperado durante a organização dos arquivos: {e}", 'error')
-            raise e
-        
         finally:
             os.chdir(cwd_original)
-            self.log("\n[SISTEMA] Pasta liberada para edição pelo Windows.")
 
-            if caminho_html_navegador:
-                webbrowser.open(caminho_html_navegador)
+    def organizar_html_raiz(self):
+        html_encontrado = None
+        for root, dirs, files in os.walk('.'):
+            for file in files:
+                if file.lower().endswith('.html'):
+                    caminho_atual = os.path.join(root, file)
+                    destino = 'index.html'
+                    if os.path.abspath(caminho_atual) != os.path.abspath(destino):
+                        self.mover_sobrescrever(caminho_atual, destino)
+                        self.log(f"   [HTML MOVIDO] {caminho_atual} -> {destino}")
+                    html_encontrado = destino
+                    break
+            if html_encontrado: break
+        
+        if not html_encontrado:
+            self.log("Nenhum arquivo HTML encontrado. As pastas serão organizadas mesmo assim.", 'warning')
+        return html_encontrado
 
-    def padronizar_pastas(self):
-        self.log("\n[ETAPA 4] Organizando Pastas e Validando Formatos...")
+    def padronizar_pastas_raiz(self):
         regras = {
             'css': ['.css'],
             'js': ['.js'],
-            'img': ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'],
-            'font': ['.ttf', '.otf', '.woff', '.woff2', '.eot']
+            'img': ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.gif', '.ico'],
+            'font': ['.ttf', '.woff', '.woff2', '.eot', '.otf']
         }
-
-        for pasta in regras.keys():
-            if not os.path.exists(pasta):
-                os.makedirs(pasta)
-                self.log(f"   [CRIAR PASTA] {pasta}/")
-
-        mapa_mudancas = {} 
+        
+        mapa = {}
+        for pasta in regras:
+            if not os.path.exists(pasta): os.makedirs(pasta)
 
         for root, dirs, files in os.walk('.', topdown=False):
             for file in files:
-                extensao = os.path.splitext(file)[1].lower()
+                ext = os.path.splitext(file)[1].lower()
                 
-                # VALIDAÇÕES DE ARQUIVOS INFORME O USUÁRIO (ALERTA)
-                if extensao in ['.mp4', '.avi', '.mov', '.wmv', '.mkv']:
+                # Alertas de Formatos
+                if ext in ['.mp4', '.avi', '.mov', '.wmv', '.mkv']:
                     self.log(f"[ ALERTA ] ATENÇÃO USUÁRIO: Arquivo de vídeo '{file}' encontrado.\nConverta para .webm", 'alert_format')
-                
-                elif extensao in ['.svg', '.gif', '.bmp', '.ico', '.tiff']:
+                elif ext in ['.svg', '.gif', '.bmp', '.ico', '.tiff']:
                     self.log(f"[ ALERTA ] FORMATO DE IMAGEM INVÁLIDO: '{file}'.\nConverta para o padrão (.png, .jpg ou .webp) ou devolva para o fornecedor refazer.", 'alert_format')
 
-                pasta_destino = None
-                for pasta_key, exts in regras.items():
-                    if extensao in exts:
-                        pasta_destino = pasta_key
-                        break
+                pasta_alvo = next((p for p, exts in regras.items() if ext in exts), None)
                 
-                if pasta_destino:
-                    origem_abs = os.path.join(root, file)
-                    relativo_origem = os.path.relpath(origem_abs, '.').replace('\\', '/')
+                if pasta_alvo:
+                    origem = os.path.join(root, file)
+                    relativo_origem = os.path.relpath(origem, '.').replace('\\', '/')
+                    destino = os.path.join(pasta_alvo, file)
                     
-                    if relativo_origem.startswith(pasta_destino + '/'):
-                        if relativo_origem.count('/') == 1:
-                            continue
+                    if os.path.abspath(origem) != os.path.abspath(destino):
+                        self.mover_sobrescrever(origem, destino)
+                        mapa[relativo_origem] = f"{pasta_alvo}/{file}"
+                        self.log(f"   [MOVIDO] {file} -> {pasta_alvo}/")
+        return mapa
 
-                    destino_abs = os.path.join(pasta_destino, file)
-                    relativo_destino = os.path.join(pasta_destino, file).replace('\\', '/')
-
+    def otimizar_imagens_qualidade(self):
+        if not TEM_PILLOW: return
+        self.log(">> Otimizando imagens (Mantendo 100% da qualidade original)...")
+        path_img = 'img'
+        if os.path.exists(path_img):
+            for file in os.listdir(path_img):
+                caminho = os.path.join(path_img, file)
+                if file.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
                     try:
-                        self.mover_sobrescrever(origem_abs, destino_abs)
-                        if 'images/' in relativo_origem.lower() or ('img/' in relativo_origem.lower() and relativo_origem.count('/') > 1):
-                            self.log(f"   [EXTRAINDO] {relativo_origem}  >>>  {relativo_destino}")
-                        else:
-                            self.log(f"   [MOVIDO] {relativo_origem}  >>>  {relativo_destino}")
-                            
-                        mapa_mudancas[relativo_origem] = relativo_destino
-                    except Exception as e:
-                        self.log(f"Erro ao tentar mover o arquivo {file}: {e}", 'error')
+                        with Image.open(caminho) as img:
+                            img.save(caminho, optimize=True, quality=95 if file.lower().endswith(('.jpg', '.jpeg')) else None)
+                    except: pass
+
+    def corrigir_caminhos_html(self, html_file, mapa):
+        self.log(">> Corrigindo caminhos no HTML...")
+        with open(html_file, 'r', encoding='utf-8', errors='ignore') as f:
+            conteudo = f.read()
+
+        # Substitui os mapeamentos exatos de arquivos que foram movidos
+        chaves_ordenadas = sorted(mapa.keys(), key=len, reverse=True)
+        for caminho_antigo in chaves_ordenadas:
+            caminho_novo = mapa[caminho_antigo]
+            if caminho_antigo in conteudo:
+                conteudo = conteudo.replace(caminho_antigo, caminho_novo)
+
+        # Remove prefixos de pastas ou caminhos complexos mantendo o padrão src="pasta/arquivo"
+        def fix_paths(match):
+            attr = match.group(1) # href ou src
+            folder = match.group(2) # css, js, img, font
+            filename = match.group(3) # nome do arquivo
+            return f'{attr}="{folder}/{filename}"'
+
+        conteudo = re.sub(r'(href|src)=["\'](?:\.\./|\./|/|assets/|src/|public/|dist/)*(css|js|img|font)/([^"\']+)["\']', fix_paths, conteudo)
+
+        with open(html_file, 'w', encoding='utf-8') as f:
+            f.write(conteudo)
+
+    def corrigir_caminhos_css(self):
+        self.log(">> Corrigindo URLs dentro dos arquivos CSS...")
+        path_css = 'css'
+        if not os.path.exists(path_css): return
         
-        return mapa_mudancas
-
-    def processar_arquivos_css(self):
-        path_css_folder = os.path.join(os.getcwd(), 'css')
-        if not os.path.exists(path_css_folder): 
-            return
-
-        self.log("\n[ETAPA 6] Corrigindo referências internas nos arquivos CSS...")
-        arquivos_css = [f for f in os.listdir(path_css_folder) if f.endswith('.css')]
-
-        for css_file in arquivos_css:
-            caminho_arquivo = os.path.join(path_css_folder, css_file)
-            try:
-                with open(caminho_arquivo, 'r', encoding='utf-8') as f:
+        for file in os.listdir(path_css):
+            if file.endswith('.css'):
+                caminho = os.path.join(path_css, file)
+                with open(caminho, 'r', encoding='utf-8', errors='ignore') as f:
                     conteudo = f.read()
                 
-                mudancas_neste_arquivo = 0
+                def fix_css_url(match):
+                    url = match.group(1).strip("'\"")
+                    if url.startswith(('http', 'data:')): return match.group(0)
+                    nome = os.path.basename(url)
+                    ext = os.path.splitext(nome)[1].lower()
+                    if ext in ['.png', '.jpg', '.jpeg', '.webp', '.svg']:
+                        return f"url('../img/{nome}')"
+                    if ext in ['.ttf', '.woff', '.woff2', '.eot', '.otf']:
+                        return f"url('../font/{nome}')"
+                    return match.group(0)
 
-                def substituir_url(match):
-                    nonlocal mudancas_neste_arquivo
-                    url_original = match.group(1)
-                    full_match = match.group(0)
+                novo_conteudo = re.sub(r'url\((.*?)\)', fix_css_url, conteudo)
+                with open(caminho, 'w', encoding='utf-8') as f:
+                    f.write(novo_conteudo)
 
-                    if url_original.startswith(('http', 'https', 'data:', '//')):
-                        return full_match
-                    
-                    nome_arquivo = os.path.basename(url_original)
-                    extensao = os.path.splitext(nome_arquivo)[1].lower()
-                    
-                    novo_caminho = None
-                    if extensao in ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp']:
-                        novo_caminho = f"../img/{nome_arquivo}"
-                    elif extensao in ['.ttf', '.otf', '.woff', '.woff2', '.eot']:
-                        novo_caminho = f"../font/{nome_arquivo}"
-                    
-                    if novo_caminho and not url_original.endswith(novo_caminho):
-                        novo_full = f"url('{novo_caminho}')"
-                        self.log(f"     [CSS FIX] {url_original}  >>>  {novo_caminho}")
-                        mudancas_neste_arquivo += 1
-                        return novo_full
-                    
-                    return full_match
-
-                novo_conteudo = re.sub(r"url\s*\((?:'|\")?(.*?)(?:'|\")?\)", substituir_url, conteudo)
-                
-                if mudancas_neste_arquivo > 0:
-                    with open(caminho_arquivo, 'w', encoding='utf-8') as f:
-                        f.write(novo_conteudo)
-                    self.log(f"     -> '{css_file}' salvo com {mudancas_neste_arquivo} correções.")
-
-            except Exception as e:
-                self.log(f"Falha ao ler e editar o arquivo CSS {css_file}: {e}", 'error')
-
-    def atualizar_html(self, arquivo_html, mapa_mudancas):
-        self.log("\n[ETAPA 5] Atualizando e Padronizando Código HTML...")
-        try:
-            try:
-                with open(arquivo_html, 'r', encoding='utf-8') as f: conteudo = f.read()
-            except UnicodeDecodeError:
-                with open(arquivo_html, 'r', encoding='latin-1') as f: conteudo = f.read()
-
-            if 'assets/' in conteudo:
-                self.log("   [HTML] Removendo referências 'assets/' genéricas...")
-                conteudo = conteudo.replace('assets/', '')
-            
-            count_updates = 0
-            
-            chaves_ordenadas = sorted(mapa_mudancas.keys(), key=len, reverse=True)
-            for caminho_antigo in chaves_ordenadas:
-                caminho_novo = mapa_mudancas[caminho_antigo]
-                if caminho_antigo in conteudo:
-                    self.log(f"   [HTML RE-LINK] '{caminho_antigo}'  >>>  '{caminho_novo}'")
-                    conteudo = conteudo.replace(caminho_antigo, caminho_novo)
-                    count_updates += 1
-            
-            def fix_paths(match):
-                attr = match.group(1) # href ou src
-                folder = match.group(2) # css, js, img, font
-                filename = match.group(3) # nome do arquivo
-                novo_caminho = f'{attr}="{folder}/{filename}"'
-                
-                if match.group(0) != novo_caminho:
-                    self.log(f"   [HTML PATH FIX] {match.group(0)}  >>>  {novo_caminho}")
-                    
-                return novo_caminho
-
-            conteudo_limpo = re.sub(r'(href|src)=["\'](?:\.\./|\./|/)+(css|js|img|font)/([^"\']+)["\']', fix_paths, conteudo)
-            
-            if conteudo != conteudo_limpo:
-                conteudo = conteudo_limpo
-                count_updates += 1 
-
-            if count_updates == 0:
-                self.log("Nenhuma referência precisou ser alterada no HTML.", 'warning')
-            else:
-                self.log(f"   Processamento do HTML concluído com sucesso.")
-
-            with open(arquivo_html, 'w', encoding='utf-8') as f:
-                f.write(conteudo)
-                
-        except Exception as e:
-            self.log(f"Falha grave ao tentar atualizar o HTML: {e}", 'error')
-
-    def varredura_final_pastas(self):
-        """Passa um 'Aspirador de Pó' no projeto inteiro apagando pastas vazias, inclusive na raiz."""
-        self.log("\n[ETAPA 7] Varredura Final: Eliminando TODAS as pastas vazias da raiz...")
-        apagadas = 0
-
-        # Como topdown=False, ele apaga de dentro pra fora.
-        # Agora não há mais proteção para pastas raízes: se 'js' ou 'font' estiverem vazias, serão apagadas.
-        for root_dir, dirs, files in os.walk('.', topdown=False):
-            for name in dirs:
-                caminho_dir = os.path.join(root_dir, name)
+    def limpar_pastas_vazias_total(self):
+        self.log(">> Limpeza final: Removendo pastas vazias...")
+        for root, dirs, files in os.walk('.', topdown=False):
+            for d in dirs:
+                path = os.path.join(root, d)
                 try:
-                    if not os.listdir(caminho_dir): 
-                        os.rmdir(caminho_dir)
-                        self.log(f"   [LIXEIRA] Pasta vazia deletada: {caminho_dir.replace('./', '')}")
-                        apagadas += 1
-                except Exception as e:
-                    self.log(f"Não foi possível apagar a pasta {caminho_dir}: {e}", 'warning')
-        
-        if apagadas == 0:
-            self.log("   Nenhuma pasta inútil foi encontrada nesta varredura.")
+                    if not os.listdir(path):
+                        os.rmdir(path)
+                        self.log(f"   [LIXEIRA] Pasta vazia removida: {path.replace('./', '')}")
+                except: pass
 
     def mover_sobrescrever(self, origem, destino):
         if os.path.exists(destino):
-            if os.path.samefile(origem, destino): return
             if os.path.isdir(destino): shutil.rmtree(destino)
             else: os.remove(destino)
         shutil.move(origem, destino)
