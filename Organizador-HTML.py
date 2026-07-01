@@ -84,6 +84,10 @@ class AutomacaoApp:
         
         self.metodo_compressao = tk.StringVar(value="api")
         
+        # NOVO: Opção para não comprimir as imagens
+        rb_nenhuma = tk.Radiobutton(frame_opcoes, text="Nenhuma (Apenas organizar as pastas)", variable=self.metodo_compressao, value="nenhuma")
+        rb_nenhuma.pack(anchor="w")
+
         rb_local = tk.Radiobutton(frame_opcoes, text="Rápida (Local / Pillow)", variable=self.metodo_compressao, value="local")
         rb_local.pack(anchor="w")
         
@@ -199,10 +203,13 @@ class AutomacaoApp:
 
             mapa_mudancas, videos_convertidos = self.padronizar_pastas_raiz()
 
+            # Lógica atualizada com a nova opção de não comprimir
             if self.metodo_compressao.get() == "api":
                 self.otimizar_imagens_api()
-            else:
+            elif self.metodo_compressao.get() == "local":
                 self.otimizar_imagens_local()
+            else:
+                self.log("\n>> Otimização de imagens ignorada (Opção 'Nenhuma' selecionada).", "warning")
 
             if html_principal:
                 self.corrigir_caminhos_html(html_principal, videos_convertidos)
