@@ -58,7 +58,7 @@ except ImportError:
 # =========================================================
 # CONFIGURAÇÃO DA API (iLoveAPI)
 # =========================================================
-PUBLIC_KEY = "project_public_1e0d837376d0a509db55fbe93966676e_0egjH475c0a3a83d56566376b4b69f02e249b"
+PUBLIC_KEY = ""
 
 class AutomacaoApp:
     def __init__(self, root):
